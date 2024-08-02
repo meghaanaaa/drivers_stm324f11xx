@@ -1,0 +1,118 @@
+/*
+ * 005SpiArduinoTxOly.c
+ *
+ *  Created on: Jul 8, 2024
+ *      Author: megar
+ *      PB14-->MISO
+ *      PB15-->MOSI
+ *      PB9-->NSS
+ *      PB10-->SCK
+ *      PB12-->button
+ */
+
+
+#include "stm32f411x.h"
+#include <string.h>
+#include <stdint.h>
+
+void delay(void){
+	for(uint32_t i=0;i<250000;i++);
+}
+
+void SPI2_GPIOInits()
+{
+	GPIO_handle_t SPIPins;
+	SPIPins.pGPIOX=GPIOB;
+	SPIPins.GPIO_PinConfig.GPIO_PinMode=GPIO_MODE_ALTFN;
+	SPIPins.GPIO_PinConfig.GPIO_PinAltFunMode=5;
+	SPIPins.GPIO_PinConfig.GPIO_PinOPType=GPIO_OP_TYPE_PP;
+	SPIPins.GPIO_PinConfig.GPIO_PinPuPdControl=GPIO_NO_PUPD;
+	SPIPins.GPIO_PinConfig.GPIO_PinSpeed=GPIO_SPEED_FAST;
+
+	//SCK
+	SPIPins.GPIO_PinConfig.GPIO_PinNumber=GPIO_PIN_NO_10;
+	GPIO_Init(&SPIPins);
+
+	//MOSI
+	SPIPins.GPIO_PinConfig.GPIO_PinNumber=GPIO_PIN_NO_15;
+	GPIO_Init(&SPIPins);
+
+	//MISO
+	//SPIPins.GPIO_PinConfig.GPIO_PinNumber=GPIO_PIN_NO_14;
+	//GPIO_Init(&SPIPins);
+
+	//NSS
+	SPIPins.GPIO_PinConfig.GPIO_PinNumber=GPIO_PIN_NO_9;
+	GPIO_Init(&SPIPins);
+
+
+}
+
+void GPIO_ButtonInit(void){
+
+	//button initialization
+	GPIO_handle_t GPIOBtn;
+
+	//this is btn gpio configuration
+	GPIOBtn.pGPIOX = GPIOA;
+	GPIOBtn.GPIO_PinConfig.GPIO_PinNumber = GPIO_PIN_NO_0;
+	GPIOBtn.GPIO_PinConfig.GPIO_PinMode = GPIO_MODE_IN;
+	GPIOBtn.GPIO_PinConfig.GPIO_PinSpeed = GPIO_SPEED_FAST;
+	GPIOBtn.GPIO_PinConfig.GPIO_PinPuPdControl = GPIO_NO_PUPD;
+
+	GPIO_Init(&GPIOBtn);
+}
+
+void SPI2_Inits(void)
+{
+	SPI_Handle_t SPI2_Handle;
+	SPI2_Handle.pSPIx = SPI2;
+	SPI2_Handle.SPIConfig.SPI_BusConfig=SPI_BUS_CONFIG_FD;
+	SPI2_Handle.SPIConfig.SPI_DeviceMode=SPI_DEVICE_MODE_MASTER;
+	SPI2_Handle.SPIConfig.SPI_SclkSpeed=SPI_SCLK_SPEED_DIV8;//2MHz clock
+	SPI2_Handle.SPIConfig.SPI_DFF=SPI_DFF_8BITS;
+	SPI2_Handle.SPIConfig.SPI_CPHA=SPI_CPHA_LOW;
+	SPI2_Handle.SPIConfig.SPI_CPOL=SPI_CPOL_LOW;
+	SPI2_Handle.SPIConfig.SPI_SSM=SPI_SSM_DI;//Hardware Slave select management
+
+	SPI_Init(&SPI2_Handle);
+}
+int main(void)
+{
+	char user_data[]="Hello World JUST WHEN YOU THOUGTH YOU COULDNT FIGURE OUT YOU DID!!";
+
+	GPIO_ButtonInit();
+
+	SPI2_GPIOInits();
+
+	SPI2_Inits();
+	//Eabling SPI SSOE BIT
+	SPI_SSOEConfig(SPI2,ENABLE);
+
+	while(1){
+
+
+		uint8_t dataLen=strlen(user_data);
+
+		//wait for the button to be pressed
+		while(!GPIO_ReadFromInputPin(GPIOA,GPIO_PIN_NO_0));
+
+		//delay t avoid switch debouncing
+		delay();
+
+		//enable spi2 perpheral
+		SPI_peripheralcontrol(SPI2,ENABLE);
+
+		//first send the length information
+		SPI_SendData(SPI2,&dataLen,1);
+
+		SPI_SendData(SPI2,(uint8_t*)user_data,strlen(user_data));
+
+		//confirm that the spi is not busy
+		while(SPI_GetFlagStatus(SPI2,SPI_BUSY_FLAG)== FLAG_RESET);
+		SPI_peripheralcontrol(SPI2,DISABLE);
+
+	}
+
+	return 0;
+}
